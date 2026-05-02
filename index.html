@@ -162,6 +162,7 @@
       <input type="search" id="search" placeholder="Search driver, vehicle, description…" />
       <label class="dr">From <input type="date" id="dateFrom"></label>
       <label class="dr">To <input type="date" id="dateTo"></label>
+      <div class="ms" data-key="month"><button class="ms-btn">Month <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
       <div class="ms" data-key="cat"><button class="ms-btn">Categories <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
       <div class="ms" data-key="driver"><button class="ms-btn">Drivers <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
       <div class="ms" data-key="veh"><button class="ms-btn">Vehicles <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
@@ -369,10 +370,19 @@ function ymd(d){ if(!d) return ""; return d.toISOString().slice(0,10); }
 
 function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
 
-const MS_STATE = {cat:new Set(), driver:new Set(), veh:new Set(), sBank:new Set(), sVeh:new Set()};
-const MS_RENDER = {cat:()=>render(), driver:()=>render(), veh:()=>render(), sBank:()=>renderSalary(), sVeh:()=>renderSalary()};
+const MS_STATE = {month:new Set(), cat:new Set(), driver:new Set(), veh:new Set(), sBank:new Set(), sVeh:new Set()};
+const MS_RENDER = {month:()=>render(), cat:()=>render(), driver:()=>render(), veh:()=>render(), sBank:()=>renderSalary(), sVeh:()=>renderSalary()};
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function monthKey(d){ return d ? MONTH_NAMES[d.getMonth()]+" "+d.getFullYear() : ""; }
 
 function populateFilters(){
+  // Months sorted chronologically using a representative date
+  const monthsData = uniq(rows.map(r=>monthKey(r.dateObj))).filter(Boolean);
+  monthsData.sort((a,b)=>{
+    const [ma,ya]=a.split(" "); const [mb,yb]=b.split(" ");
+    return (+ya)-(+yb) || MONTH_NAMES.indexOf(ma)-MONTH_NAMES.indexOf(mb);
+  });
+  buildMS("month", monthsData);
   buildMS("cat", uniq(rows.map(r=>r.desc)).sort());
   buildMS("driver", uniq(rows.map(r=>r.driver)).sort());
   buildMS("veh", uniq(rows.map(r=>r.veh)).sort());
@@ -434,6 +444,7 @@ function applyFilters(data){
   const to   = $("dateTo").value   ? new Date($("dateTo").value)   : null;
   if (to) to.setHours(23,59,59,999);
   return data.filter(r=>{
+    if (MS_STATE.month.size && !MS_STATE.month.has(monthKey(r.dateObj))) return false;
     if (MS_STATE.cat.size && !MS_STATE.cat.has(r.desc)) return false;
     if (MS_STATE.driver.size && !MS_STATE.driver.has(r.driver)) return false;
     if (MS_STATE.veh.size && !MS_STATE.veh.has(r.veh)) return false;
@@ -568,7 +579,7 @@ function exportCSV(){
 ["search","filterType","dateFrom","dateTo"].forEach(id=>$(id).addEventListener("input",render));
 $("clearBtn").onclick = ()=>{
   ["search","filterType","dateFrom","dateTo"].forEach(id=>$(id).value="");
-  Object.keys(MS_STATE).forEach(k=>{
+  ["month","cat","driver","veh"].forEach(k=>{
     MS_STATE[k].clear();
     document.querySelectorAll(`.ms[data-key="${k}"] input[type=checkbox]`).forEach(cb=>cb.checked=false);
     updateMSCount(k);
