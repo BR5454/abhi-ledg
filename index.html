@@ -19,6 +19,19 @@
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:linear-gradient(180deg,#0a0f24 0%,#0b1020 60%);color:var(--text);font-family:Inter,system-ui,sans-serif}
   a{color:var(--accent2)}
+  .layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+  @media(max-width:880px){.layout{grid-template-columns:1fr}.sidebar{position:sticky;top:0;z-index:20}}
+  .sidebar{background:#0a0f24;border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:6px}
+  .sidebar .brand{margin-bottom:18px}
+  .sidebar .brand h1{font-size:16px}
+  .sidebar .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;color:var(--muted);cursor:pointer;font-weight:600;font-size:13px;transition:.15s;border:1px solid transparent}
+  .sidebar .nav-item:hover{background:rgba(124,92,255,.08);color:var(--text)}
+  .sidebar .nav-item.active{background:linear-gradient(135deg,rgba(124,92,255,.2),rgba(34,211,238,.12));color:var(--text);border-color:var(--accent)}
+  .sidebar .nav-item .ico{width:22px;text-align:center;font-size:16px}
+  .sidebar .sect{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px;padding:14px 12px 6px;font-weight:700}
+  .sidebar .foot{margin-top:auto;font-size:11px;color:var(--muted);padding:10px 12px;border-top:1px solid var(--line)}
+  .view{display:none}
+  .view.active{display:block}
   .wrap{max-width:1400px;margin:0 auto;padding:24px}
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
   .brand{display:flex;align-items:center;gap:14px}
@@ -91,14 +104,30 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">KL</div>
+      <div><h1>KAIL Logistics</h1><div class="sub" style="font-size:11px">Business Portal</div></div>
+    </div>
+    <div class="sect">Modules</div>
+    <div class="nav-item active" data-view="ledger"><span class="ico">📒</span> Daily Cash Ledger</div>
+    <div class="nav-item" data-view="salary"><span class="ico">💰</span> Driver Salary</div>
+    <div class="foot">
+      <span class="status-dot" id="statusDot"></span> <span id="statusText">—</span>
+      <div style="margin-top:6px" id="lastSync">—</div>
+    </div>
+  </aside>
+
+  <main>
+  <div class="view active" id="view-ledger">
+  <div class="wrap">
 
   <div class="topbar">
     <div class="brand">
-      <div class="logo">KL</div>
       <div>
-        <h1>KAIL Logistics — Daily Cash Ledger</h1>
-        <div class="sub"><span class="status-dot" id="statusDot"></span> <span id="statusText">Connecting to Google Sheets…</span></div>
+        <h1>Daily Cash Ledger</h1>
+        <div class="sub">Track every rupee in & out of the logistics cash box</div>
       </div>
     </div>
     <div class="actions">
@@ -161,8 +190,78 @@
   </div>
 
   <div class="footer">
-    Live-synced from Google Sheets · Built for KAIL Logistics · <span id="lastSync">—</span>
+    Live-synced from Google Sheets · Built for KAIL Logistics
   </div>
+  </div>
+  </div><!-- /view-ledger -->
+
+  <div class="view" id="view-salary">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <div>
+          <h1>Driver Salary</h1>
+          <div class="sub">Monthly payroll · live from Google Sheets</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="salRefreshBtn">↻ Refresh</button>
+        <button class="btn" id="salExportBtn">⬇ Export CSV</button>
+        <button class="btn" id="salPrintBtn">🖨 Print</button>
+        <a class="btn primary" target="_blank" href="https://docs.google.com/spreadsheets/d/e/2PACX-1vTqWiE_PuyPt_cSS0dx-l5B0ypwn5lwxxq-Om7VKMSSy5YQgiLI4LDq7FgWNrzbrA/pub?output=csv">View Sheet</a>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="lbl">Total Net Payable</div><div class="val green" id="sKpiNet">—</div><div class="delta" id="sKpiNetDelta">—</div></div>
+      <div class="card"><div class="lbl">Gross Salary</div><div class="val" id="sKpiGross">—</div><div class="delta">All drivers</div></div>
+      <div class="card"><div class="lbl">Total Advances</div><div class="val amber" id="sKpiAdv">—</div><div class="delta" id="sKpiAdvDelta">Deducted</div></div>
+      <div class="card"><div class="lbl">Total Fines</div><div class="val red" id="sKpiFine">—</div><div class="delta">Deducted</div></div>
+      <div class="card"><div class="lbl">Drivers</div><div class="val" id="sKpiCount">—</div><div class="delta" id="sKpiPayDelta">—</div></div>
+    </div>
+
+    <div class="panel">
+      <h3>Salary Sheet</h3>
+      <div class="filters">
+        <input type="search" id="sSearch" placeholder="Search driver, vehicle, bank…" />
+        <div class="ms" data-key="sBank"><button class="ms-btn">Bank <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
+        <div class="ms" data-key="sVeh"><button class="ms-btn">Vehicle <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
+        <select id="sFilterPay">
+          <option value="">All pay status</option>
+          <option value="YES">Paid (YES)</option>
+          <option value="NO">Pending (NO)</option>
+        </select>
+        <select id="sFilterAdj">
+          <option value="">All</option>
+          <option value="adv">Has Advance</option>
+          <option value="fine">Has Fine</option>
+          <option value="bonus">Has Bonus</option>
+          <option value="pending">Has Pending</option>
+        </select>
+        <button class="btn" id="sClearBtn">Clear all</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Driver</th><th>Mobile</th><th>Vehicle</th>
+              <th class="num">Days</th><th class="num">Fix</th><th class="num">Gross</th>
+              <th class="num">Bonus</th><th class="num">Pending</th>
+              <th class="num">Advance</th><th class="num">Fine</th>
+              <th class="num">Net Pay</th><th>Bank</th><th>Account</th><th>IFSC</th><th>Pay</th>
+            </tr>
+          </thead>
+          <tbody id="sTbody"><tr><td colspan="15" class="empty"><span class="loader"></span> Loading salary data…</td></tr></tbody>
+        </table>
+      </div>
+      <div style="margin-top:8px;color:var(--muted);font-size:12px">Showing <span id="sRowCount">0</span> drivers</div>
+    </div>
+
+    <div class="footer">Live-synced from Google Sheets · Built for KAIL Logistics</div>
+  </div>
+  </div><!-- /view-salary -->
+
+  </main>
 </div>
 
 <script>
@@ -270,7 +369,8 @@ function ymd(d){ if(!d) return ""; return d.toISOString().slice(0,10); }
 
 function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
 
-const MS_STATE = {cat:new Set(), driver:new Set(), veh:new Set()};
+const MS_STATE = {cat:new Set(), driver:new Set(), veh:new Set(), sBank:new Set(), sVeh:new Set()};
+const MS_RENDER = {cat:()=>render(), driver:()=>render(), veh:()=>render(), sBank:()=>renderSalary(), sVeh:()=>renderSalary()};
 
 function populateFilters(){
   buildMS("cat", uniq(rows.map(r=>r.desc)).sort());
@@ -304,12 +404,12 @@ function buildMS(key, items){
         if (checked) MS_STATE[key].add(cb.value); else MS_STATE[key].delete(cb.value);
       }
     });
-    updateMSCount(key); render();
+    updateMSCount(key); (MS_RENDER[key]||render)();
   });
   pop.querySelectorAll('input[type=checkbox]').forEach(cb=>{
     cb.onchange = ()=>{
       if (cb.checked) MS_STATE[key].add(cb.value); else MS_STATE[key].delete(cb.value);
-      updateMSCount(key); render();
+      updateMSCount(key); (MS_RENDER[key]||render)();
     };
   });
   root.querySelector(".ms-btn").onclick = e=>{
@@ -481,6 +581,160 @@ $("printBtn").onclick = ()=>window.print();
 
 load();
 setInterval(load, 60_000); // auto refresh every minute
+
+/* ===================== SALARY MODULE ===================== */
+const SALARY_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTqWiE_PuyPt_cSS0dx-l5B0ypwn5lwxxq-Om7VKMSSy5YQgiLI4LDq7FgWNrzbrA/pub?output=csv";
+let salaryRows = [];
+
+async function fetchAny(url){
+  const tries = [url, "https://corsproxy.io/?"+encodeURIComponent(url), "https://api.allorigins.win/raw?url="+encodeURIComponent(url)];
+  let err;
+  for (const u of tries){
+    try { const r = await fetch(u, {cache:"no-store"}); if(!r.ok) throw new Error("HTTP "+r.status); const t = await r.text(); if(t&&t.length>30) return t; } catch(e){err=e;}
+  }
+  throw err;
+}
+
+async function loadSalary(){
+  $("sTbody").innerHTML = '<tr><td colspan="15" class="empty"><span class="loader"></span> Loading salary data…</td></tr>';
+  try {
+    const text = await fetchAny(SALARY_URL);
+    const parsed = Papa.parse(text, {header:true, skipEmptyLines:true}).data;
+    salaryRows = parsed.map(r=>({
+      driver: (r["DRIVER NAME"]||"").trim(),
+      mobile: (r["MOBILE NO"]||"").trim(),
+      veh: (r["ALLOTED VEHICLE"]||"").trim(),
+      days: parseNum(r["WORKING DAYS"]),
+      fix: parseNum(r["FIX SALARY"]),
+      gross: parseNum(r["GROSS SALARY"]),
+      bonus: parseNum(r["ON TIME REPORTING"]),
+      pending: parseNum(r["LAST MONTH PENDING"]),
+      adv: parseNum(r["ADVANCE "]||r["ADVANCE"]),
+      fine: parseNum(r["FINE"]),
+      net: parseNum(r["NET PAYMENT"]),
+      bankName: (r["NAME IN BANK"]||"").trim(),
+      bank: (r["BANK"]||"").trim(),
+      acc: (r["ACCOUNT NO"]||"").trim(),
+      ifsc: (r["IFSC CODE"]||"").trim(),
+      pay: (r["PAY"]||"").trim().toUpperCase()
+    })).filter(r=>r.driver);
+    buildMS("sBank", uniq(salaryRows.map(r=>r.bank)).sort());
+    buildMS("sVeh", uniq(salaryRows.map(r=>r.veh)).sort());
+    renderSalary();
+  } catch(e){
+    $("sTbody").innerHTML = `<tr><td colspan="15" class="empty"><b style="color:#f87171">⚠ Failed to load salary sheet: ${escapeHtml(e.message||"")}</b></td></tr>`;
+  }
+}
+
+function applySalaryFilters(){
+  const q = $("sSearch").value.toLowerCase().trim();
+  const pay = $("sFilterPay").value;
+  const adj = $("sFilterAdj").value;
+  return salaryRows.filter(r=>{
+    if (MS_STATE.sBank.size && !MS_STATE.sBank.has(r.bank)) return false;
+    if (MS_STATE.sVeh.size && !MS_STATE.sVeh.has(r.veh)) return false;
+    if (pay && r.pay !== pay) return false;
+    if (adj === "adv" && !r.adv) return false;
+    if (adj === "fine" && !r.fine) return false;
+    if (adj === "bonus" && !r.bonus) return false;
+    if (adj === "pending" && !r.pending) return false;
+    if (q){
+      const hay = [r.driver,r.mobile,r.veh,r.bank,r.bankName,r.acc,r.ifsc].join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderSalary(){
+  const data = applySalaryFilters();
+  // KPIs
+  const sum = (k)=>data.reduce((a,r)=>a+(r[k]||0),0);
+  const tNet = sum("net"), tGross = sum("gross"), tAdv = sum("adv"), tFine = sum("fine");
+  const paid = data.filter(r=>r.pay==="YES").length, pending = data.filter(r=>r.pay==="NO").length;
+  $("sKpiNet").textContent = fmt(tNet);
+  $("sKpiNetDelta").textContent = `${data.length} drivers`;
+  $("sKpiGross").textContent = fmt(tGross);
+  $("sKpiAdv").textContent = fmt(tAdv);
+  $("sKpiAdvDelta").textContent = data.filter(r=>r.adv).length + " drivers with advance";
+  $("sKpiFine").textContent = fmt(tFine);
+  $("sKpiCount").textContent = data.length;
+  $("sKpiPayDelta").innerHTML = `<span class="green">✓ ${paid} paid</span> · <span class="red">${pending} pending</span>`;
+  // Table
+  const tb = $("sTbody");
+  if (!data.length){ tb.innerHTML = '<tr><td colspan="15" class="empty">No matching drivers.</td></tr>'; $("sRowCount").textContent=0; return; }
+  tb.innerHTML = data.map(r=>`
+    <tr>
+      <td><b>${escapeHtml(r.driver)}</b>${r.bankName?'<br><span style="color:var(--muted);font-size:11px">'+escapeHtml(r.bankName)+'</span>':''}</td>
+      <td>${escapeHtml(r.mobile)}</td>
+      <td>${r.veh?'<span class="pill cat">'+escapeHtml(r.veh)+'</span>':''}</td>
+      <td class="num">${r.days||''}</td>
+      <td class="num">${r.fix?fmt(r.fix):''}</td>
+      <td class="num">${r.gross?fmt(r.gross):''}</td>
+      <td class="num green">${r.bonus?fmt(r.bonus):''}</td>
+      <td class="num amber">${r.pending?fmt(r.pending):''}</td>
+      <td class="num amber">${r.adv?fmt(r.adv):''}</td>
+      <td class="num red">${r.fine?fmt(r.fine):''}</td>
+      <td class="num"><b class="${r.net<0?'red':'green'}">${r.net?fmt(r.net):''}</b></td>
+      <td>${escapeHtml(r.bank)}</td>
+      <td style="font-family:JetBrains Mono,monospace;font-size:11px">${escapeHtml(r.acc)}</td>
+      <td style="font-family:JetBrains Mono,monospace;font-size:11px">${escapeHtml(r.ifsc)}</td>
+      <td>${r.pay==="YES"?'<span class="pill in">PAID</span>':r.pay==="NO"?'<span class="pill out">PENDING</span>':''}</td>
+    </tr>`).join("");
+  // Footer total row
+  tb.innerHTML += `<tr class="day-row">
+    <td colspan="3">📊 TOTALS (${data.length} drivers)</td>
+    <td class="num">${sum("days")}</td>
+    <td class="num">${fmt(sum("fix"))}</td>
+    <td class="num">${fmt(tGross)}</td>
+    <td class="num green">${fmt(sum("bonus"))}</td>
+    <td class="num amber">${fmt(sum("pending"))}</td>
+    <td class="num amber">${fmt(tAdv)}</td>
+    <td class="num red">${fmt(tFine)}</td>
+    <td class="num green">${fmt(tNet)}</td>
+    <td colspan="4"></td>
+  </tr>`;
+  $("sRowCount").textContent = data.length;
+}
+
+function exportSalaryCSV(){
+  const data = applySalaryFilters();
+  const head = ["Driver","Mobile","Vehicle","Days","Fix","Gross","Bonus","Pending","Advance","Fine","Net","Bank Name","Bank","Account","IFSC","Pay"];
+  const lines = [head.join(",")].concat(data.map(r=>[
+    r.driver,r.mobile,r.veh,r.days,r.fix,r.gross,r.bonus,r.pending,r.adv,r.fine,r.net,r.bankName,r.bank,r.acc,r.ifsc,r.pay
+  ].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(",")));
+  const blob = new Blob([lines.join("\n")], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "kail-salary-" + new Date().toISOString().slice(0,10) + ".csv";
+  a.click();
+}
+
+["sSearch","sFilterPay","sFilterAdj"].forEach(id=>$(id).addEventListener("input", renderSalary));
+$("sClearBtn").onclick = ()=>{
+  ["sSearch","sFilterPay","sFilterAdj"].forEach(id=>$(id).value="");
+  ["sBank","sVeh"].forEach(k=>{
+    MS_STATE[k].clear();
+    document.querySelectorAll(`.ms[data-key="${k}"] input[type=checkbox]`).forEach(cb=>cb.checked=false);
+    updateMSCount(k);
+  });
+  renderSalary();
+};
+$("salRefreshBtn").onclick = loadSalary;
+$("salExportBtn").onclick = exportSalaryCSV;
+$("salPrintBtn").onclick = ()=>window.print();
+
+/* ===================== SIDEBAR NAV ===================== */
+document.querySelectorAll(".nav-item").forEach(item=>{
+  item.onclick = ()=>{
+    document.querySelectorAll(".nav-item").forEach(n=>n.classList.remove("active"));
+    item.classList.add("active");
+    const v = item.dataset.view;
+    document.querySelectorAll(".view").forEach(view=>view.classList.toggle("active", view.id === "view-"+v));
+    if (v === "salary" && !salaryRows.length) loadSalary();
+    window.scrollTo({top:0});
+  };
+});
 </script>
 </body>
 </html>
