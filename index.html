@@ -225,6 +225,7 @@
       <h3>Salary Sheet</h3>
       <div class="filters">
         <input type="search" id="sSearch" placeholder="Search driver, vehicle, bank…" />
+        <div class="ms" data-key="sMonth"><button class="ms-btn">Month <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
         <div class="ms" data-key="sBank"><button class="ms-btn">Bank <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
         <div class="ms" data-key="sVeh"><button class="ms-btn">Vehicle <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
         <select id="sFilterPay">
@@ -370,8 +371,8 @@ function ymd(d){ if(!d) return ""; return d.toISOString().slice(0,10); }
 
 function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
 
-const MS_STATE = {month:new Set(), cat:new Set(), driver:new Set(), veh:new Set(), sBank:new Set(), sVeh:new Set()};
-const MS_RENDER = {month:()=>render(), cat:()=>render(), driver:()=>render(), veh:()=>render(), sBank:()=>renderSalary(), sVeh:()=>renderSalary()};
+const MS_STATE = {month:new Set(), cat:new Set(), driver:new Set(), veh:new Set(), sMonth:new Set(), sBank:new Set(), sVeh:new Set()};
+const MS_RENDER = {month:()=>render(), cat:()=>render(), driver:()=>render(), veh:()=>render(), sMonth:()=>renderSalary(), sBank:()=>renderSalary(), sVeh:()=>renderSalary()};
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function monthKey(d){ return d ? MONTH_NAMES[d.getMonth()]+" "+d.getFullYear() : ""; }
 
@@ -611,7 +612,10 @@ async function loadSalary(){
   try {
     const text = await fetchAny(SALARY_URL);
     const parsed = Papa.parse(text, {header:true, skipEmptyLines:true}).data;
-    salaryRows = parsed.map(r=>({
+    salaryRows = parsed.map(r=>{
+      const monthRaw = (r["MONTH"]||r["PAY MONTH"]||r["SALARY MONTH"]||r["Month"]||"").trim();
+      return {
+      month: monthRaw,
       driver: (r["DRIVER NAME"]||"").trim(),
       mobile: (r["MOBILE NO"]||"").trim(),
       veh: (r["ALLOTED VEHICLE"]||"").trim(),
@@ -628,7 +632,26 @@ async function loadSalary(){
       acc: (r["ACCOUNT NO"]||"").trim(),
       ifsc: (r["IFSC CODE"]||"").trim(),
       pay: (r["PAY"]||"").trim().toUpperCase()
-    })).filter(r=>r.driver);
+      };
+    }).filter(r=>r.driver);
+    const sMonths = uniq(salaryRows.map(r=>r.month)).filter(Boolean);
+    const sMonthRoot = document.querySelector('.ms[data-key="sMonth"]');
+    if (sMonths.length){
+      buildMS("sMonth", sMonths);
+      sMonthRoot.title = "";
+      sMonthRoot.style.opacity = "1";
+    } else {
+      buildMS("sMonth", []);
+      sMonthRoot.title = "Add a MONTH column to your salary Google Sheet (e.g. 'Oct 2025') to enable this filter";
+      sMonthRoot.style.opacity = "0.5";
+      const pop = sMonthRoot.querySelector(".ms-pop");
+      pop.innerHTML = `<div style="padding:10px;font-size:12px;color:var(--muted);line-height:1.5">
+        <b style="color:var(--amber)">⚠ No MONTH column found</b><br><br>
+        To enable this filter, add a column named <code style="background:#161e3c;padding:1px 6px;border-radius:4px">MONTH</code> to your salary Google Sheet and fill it in like:<br><br>
+        <code style="background:#161e3c;padding:2px 6px;border-radius:4px">Oct 2025</code>, <code style="background:#161e3c;padding:2px 6px;border-radius:4px">Nov 2025</code>…<br><br>
+        Refresh after adding — months will appear here automatically.
+      </div>`;
+    }
     buildMS("sBank", uniq(salaryRows.map(r=>r.bank)).sort());
     buildMS("sVeh", uniq(salaryRows.map(r=>r.veh)).sort());
     renderSalary();
@@ -642,6 +665,7 @@ function applySalaryFilters(){
   const pay = $("sFilterPay").value;
   const adj = $("sFilterAdj").value;
   return salaryRows.filter(r=>{
+    if (MS_STATE.sMonth.size && !MS_STATE.sMonth.has(r.month)) return false;
     if (MS_STATE.sBank.size && !MS_STATE.sBank.has(r.bank)) return false;
     if (MS_STATE.sVeh.size && !MS_STATE.sVeh.has(r.veh)) return false;
     if (pay && r.pay !== pay) return false;
@@ -724,7 +748,7 @@ function exportSalaryCSV(){
 ["sSearch","sFilterPay","sFilterAdj"].forEach(id=>$(id).addEventListener("input", renderSalary));
 $("sClearBtn").onclick = ()=>{
   ["sSearch","sFilterPay","sFilterAdj"].forEach(id=>$(id).value="");
-  ["sBank","sVeh"].forEach(k=>{
+  ["sMonth","sBank","sVeh"].forEach(k=>{
     MS_STATE[k].clear();
     document.querySelectorAll(`.ms[data-key="${k}"] input[type=checkbox]`).forEach(cb=>cb.checked=false);
     updateMSCount(k);
