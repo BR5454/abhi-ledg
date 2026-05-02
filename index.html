@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KAIL Logistics — Daily Cash Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#11172e; --card:#161e3c; --line:#22305c;
+    --text:#e8ecf8; --muted:#8a93b2; --accent:#7c5cff; --accent2:#22d3ee;
+    --green:#22c55e; --red:#ef4444; --amber:#f59e0b;
+    --ok-bg:rgba(34,197,94,.12); --bad-bg:rgba(239,68,68,.12);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:linear-gradient(180deg,#0a0f24 0%,#0b1020 60%);color:var(--text);font-family:Inter,system-ui,sans-serif}
+  a{color:var(--accent2)}
+  .wrap{max-width:1400px;margin:0 auto;padding:24px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:14px}
+  .logo{width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:800;font-size:20px;box-shadow:0 8px 24px rgba(124,92,255,.35)}
+  h1{margin:0;font-size:22px;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:13px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{background:var(--card);color:var(--text);border:1px solid var(--line);padding:9px 14px;border-radius:10px;cursor:pointer;font-weight:600;font-size:13px;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+  .btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),#5b3fff);border-color:transparent}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;position:relative;overflow:hidden}
+  .card::before{content:"";position:absolute;inset:0;background:radial-gradient(600px 80px at 0% 0%,rgba(124,92,255,.18),transparent 60%);pointer-events:none}
+  .card .lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.8px;font-weight:600}
+  .card .val{font-size:26px;font-weight:800;margin-top:6px;font-family:JetBrains Mono,monospace}
+  .card .delta{font-size:12px;color:var(--muted);margin-top:4px}
+  .green{color:var(--green)} .red{color:var(--red)} .amber{color:var(--amber)}
+  .grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:18px}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .panel h3{margin:0 0 12px;font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+  .filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+  .filters input,.filters select{background:#0d1430;color:var(--text);border:1px solid var(--line);padding:9px 12px;border-radius:9px;font-size:13px;font-family:inherit;outline:none}
+  .filters input:focus,.filters select:focus{border-color:var(--accent)}
+  .filters input[type=search]{min-width:240px}
+  .table-wrap{overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead{position:sticky;top:0;background:#0d1430;z-index:1}
+  th{padding:11px 12px;text-align:left;font-weight:600;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.6px;border-bottom:1px solid var(--line)}
+  td{padding:10px 12px;border-bottom:1px solid #1b2547;vertical-align:top}
+  tr:hover td{background:rgba(124,92,255,.06)}
+  .num{font-family:JetBrains Mono,monospace;text-align:right;white-space:nowrap}
+  .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.3px}
+  .pill.in{background:var(--ok-bg);color:#4ade80}
+  .pill.out{background:var(--bad-bg);color:#f87171}
+  .pill.cat{background:rgba(34,211,238,.12);color:#67e8f9}
+  .empty{padding:30px;text-align:center;color:var(--muted)}
+  .day-row{background:#0e1530!important;font-weight:700}
+  .day-row td{border-top:2px solid var(--accent);color:var(--text)}
+  .footer{margin-top:24px;color:var(--muted);font-size:12px;text-align:center}
+  .loader{display:inline-block;width:14px;height:14px;border:2px solid var(--muted);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;box-shadow:0 0 8px var(--green)}
+  .status-dot.err{background:var(--red);box-shadow:0 0 8px var(--red)}
+  .chart-box{position:relative;height:280px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+  .legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  details summary{cursor:pointer;color:var(--accent2);font-size:12px;margin-top:8px}
+  @media print{
+    body{background:#fff;color:#000}
+    .topbar .actions,.filters{display:none}
+    .panel,.card{border:1px solid #ccc;background:#fff;color:#000}
+    th{color:#444}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">KL</div>
+      <div>
+        <h1>KAIL Logistics — Daily Cash Ledger</h1>
+        <div class="sub"><span class="status-dot" id="statusDot"></span> <span id="statusText">Connecting to Google Sheets…</span></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="refreshBtn">↻ Refresh</button>
+      <button class="btn" id="exportBtn">⬇ Export CSV</button>
+      <button class="btn" id="printBtn">🖨 Print</button>
+      <a class="btn primary" target="_blank" href="https://docs.google.com/spreadsheets/d/e/2PACX-1vQhIlefG1A393DjzNgvuGjqKLRP5JxMYHLlJ_Y2I0PbvhoQP3kxwGt9TlMZA6Zljg/pub?gid=1649984652&single=true&output=csv">View Sheet</a>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="lbl">Total Cash IN</div><div class="val green" id="kpiIn">—</div><div class="delta" id="kpiInDelta">From owners</div></div>
+    <div class="card"><div class="lbl">Total Cash OUT</div><div class="val red" id="kpiOut">—</div><div class="delta" id="kpiOutDelta">All expenses</div></div>
+    <div class="card"><div class="lbl">Current Balance</div><div class="val" id="kpiBal">—</div><div class="delta" id="kpiBalDelta">Live</div></div>
+    <div class="card"><div class="lbl">Transactions</div><div class="val" id="kpiTx">—</div><div class="delta" id="kpiDays">— days tracked</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h3>Daily Spend Trend</h3>
+      <div class="chart-box"><canvas id="chartTrend"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Top Expense Categories</h3>
+      <div class="chart-box"><canvas id="chartCat"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Transactions</h3>
+    <div class="filters">
+      <input type="search" id="search" placeholder="Search driver, vehicle, description…" />
+      <select id="filterCat"><option value="">All categories</option></select>
+      <select id="filterDriver"><option value="">All drivers</option></select>
+      <select id="filterDate"><option value="">All dates</option></select>
+      <select id="filterType">
+        <option value="">All types</option>
+        <option value="in">Cash IN only</option>
+        <option value="out">Cash OUT only</option>
+      </select>
+      <button class="btn" id="clearBtn">Clear</button>
+    </div>
+    <div class="table-wrap">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Date</th><th>Type</th><th>Vehicle</th><th>Driver / Source</th>
+            <th>Description</th><th class="num">IN (₹)</th><th class="num">OUT (₹)</th><th class="num">Balance</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"><tr><td colspan="8" class="empty"><span class="loader"></span> Loading transactions…</td></tr></tbody>
+      </table>
+    </div>
+    <details>
+      <summary>Showing <span id="rowCount">0</span> rows. Click for raw CSV source.</summary>
+      <pre style="max-height:200px;overflow:auto;background:#0d1430;padding:10px;border-radius:8px;font-size:11px" id="rawDump"></pre>
+    </details>
+  </div>
+
+  <div class="footer">
+    Live-synced from Google Sheets · Built for KAIL Logistics · <span id="lastSync">—</span>
+  </div>
+</div>
+
+<script>
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhIlefG1A393DjzNgvuGjqKLRP5JxMYHLlJ_Y2I0PbvhoQP3kxwGt9TlMZA6Zljg/pub?gid=1649984652&single=true&output=csv";
+
+const fmt = n => "₹" + (Math.round(n)||0).toLocaleString("en-IN");
+const $ = id => document.getElementById(id);
+
+let rows = [];           // normalized transactions
+let trendChart, catChart;
+
+async function fetchCSV(){
+  // Try direct first, then fall back to CORS proxies (needed when opened via file://)
+  const attempts = [
+    SHEET_URL,
+    "https://corsproxy.io/?" + encodeURIComponent(SHEET_URL),
+    "https://api.allorigins.win/raw?url=" + encodeURIComponent(SHEET_URL),
+  ];
+  let lastErr;
+  for (const url of attempts){
+    try {
+      const res = await fetch(url, {cache:"no-store"});
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const text = await res.text();
+      if (!text || text.length < 50) throw new Error("Empty response");
+      return text;
+    } catch (e){ lastErr = e; }
+  }
+  throw lastErr || new Error("All fetch attempts failed");
+}
+
+async function load(){
+  setStatus("Connecting to Google Sheets…", true);
+  try {
+    const text = await fetchCSV();
+    const parsed = Papa.parse(text, {skipEmptyLines:false}).data;
+    rows = normalize(parsed);
+    $("rawDump").textContent = text.slice(0, 4000);
+    setStatus("Live · synced " + new Date().toLocaleTimeString(), false);
+    $("lastSync").textContent = "Last sync: " + new Date().toLocaleString();
+    populateFilters();
+    render();
+  } catch (e) {
+    const isFile = location.protocol === "file:";
+    const msg = "Failed to fetch" + (isFile ? " — open via http (see below) or deploy to GitHub Pages." : ": " + e.message);
+    setStatus(msg, false, true);
+    $("tbody").innerHTML = `<tr><td colspan="8" class="empty">
+      <b style="color:#f87171">⚠ ${escapeHtml(msg)}</b><br><br>
+      <span style="color:#cdd3ea">Quickest fix — run a local server in this folder:</span><br>
+      <code style="background:#0d1430;padding:6px 10px;border-radius:6px;display:inline-block;margin-top:6px">python -m http.server 8000</code><br>
+      <span style="color:#8a93b2;font-size:12px">Then open <a href="http://localhost:8000">http://localhost:8000</a></span>
+    </td></tr>`;
+  }
+}
+
+function setStatus(text, loading, err){
+  $("statusText").innerHTML = (loading ? '<span class="loader"></span> ':'') + text;
+  $("statusDot").className = "status-dot" + (err ? " err":"");
+}
+
+// CSV layout (cols 0-9):
+// 0 Date(IN) 1 Amount IN 2 Who Give 3 Date(OUT) 4 Vehicle 5 Driver 6 Amount OUT 7 Description 8 Balance 9 Comment
+function normalize(raw){
+  const out = [];
+  for (let i = 3; i < raw.length; i++){      // skip 3 header rows
+    const r = raw[i] || [];
+    const dateIn = (r[0]||"").trim();
+    const amtIn  = parseNum(r[1]);
+    const who    = (r[2]||"").trim();
+    const dateOut= (r[3]||"").trim();
+    const veh    = (r[4]||"").trim();
+    const driver = (r[5]||"").trim();
+    const amtOut = parseNum(r[6]);
+    const desc   = (r[7]||"").trim().toUpperCase();
+    const bal    = parseNum(r[8]);
+    const comment= (r[9]||"").trim();
+    if (!dateIn && !dateOut && !amtIn && !amtOut) continue;
+    const date = dateOut || dateIn;
+    if (!date && !amtIn && !amtOut) continue;
+    out.push({date, dateIn, dateOut, amtIn, who, veh, driver, amtOut, desc, bal, comment});
+  }
+  return out;
+}
+function parseNum(s){ if(s==null) return 0; const n = Number(String(s).replace(/[^\d.\-]/g,'')); return isNaN(n)?0:n; }
+
+function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
+
+function populateFilters(){
+  const cats = uniq(rows.map(r=>r.desc)).sort();
+  const drivers = uniq(rows.map(r=>r.driver)).sort();
+  const dates = uniq(rows.map(r=>r.date)).filter(Boolean);
+  fill($("filterCat"), cats);
+  fill($("filterDriver"), drivers);
+  fill($("filterDate"), dates);
+}
+function fill(sel, arr){
+  const cur = sel.value;
+  sel.innerHTML = sel.firstElementChild.outerHTML + arr.map(v=>`<option>${escapeHtml(v)}</option>`).join("");
+  sel.value = cur;
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+function applyFilters(data){
+  const q = $("search").value.toLowerCase().trim();
+  const c = $("filterCat").value;
+  const d = $("filterDriver").value;
+  const dt = $("filterDate").value;
+  const t = $("filterType").value;
+  return data.filter(r=>{
+    if (c && r.desc !== c) return false;
+    if (d && r.driver !== d) return false;
+    if (dt && r.date !== dt) return false;
+    if (t === "in" && !r.amtIn) return false;
+    if (t === "out" && !r.amtOut) return false;
+    if (q){
+      const hay = [r.driver,r.veh,r.desc,r.who,r.comment,r.date].join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function render(){
+  const data = applyFilters(rows);
+  renderKPIs(data);
+  renderTable(data);
+  renderCharts(data);
+  $("rowCount").textContent = data.length;
+}
+
+function renderKPIs(data){
+  const totalIn = data.reduce((a,r)=>a+r.amtIn,0);
+  const totalOut = data.reduce((a,r)=>a+r.amtOut,0);
+  const balance = totalIn - totalOut;
+  const days = uniq(data.map(r=>r.date)).length;
+  $("kpiIn").textContent = fmt(totalIn);
+  $("kpiOut").textContent = fmt(totalOut);
+  $("kpiBal").textContent = fmt(balance);
+  $("kpiBal").className = "val " + (balance >= 0 ? "green" : "red");
+  $("kpiTx").textContent = data.length.toLocaleString();
+  $("kpiDays").textContent = days + " days tracked";
+}
+
+function renderTable(data){
+  const tb = $("tbody");
+  if (!data.length){ tb.innerHTML = '<tr><td colspan="8" class="empty">No matching transactions.</td></tr>'; return; }
+  // group by date with running balance per filter view
+  let html = "", lastDate = "", running = 0;
+  // recompute balance from full unfiltered list ordering, but display original sheet bal too
+  data.forEach(r=>{
+    if (r.date && r.date !== lastDate){
+      const dayTotal = data.filter(x=>x.date===r.date);
+      const din = dayTotal.reduce((a,x)=>a+x.amtIn,0);
+      const dout = dayTotal.reduce((a,x)=>a+x.amtOut,0);
+      html += `<tr class="day-row"><td colspan="5">📅 ${escapeHtml(r.date)}</td>
+        <td class="num green">${din?fmt(din):''}</td>
+        <td class="num red">${dout?fmt(dout):''}</td>
+        <td class="num">${fmt(din-dout)}</td></tr>`;
+      lastDate = r.date;
+    }
+    const type = r.amtIn ? '<span class="pill in">IN</span>' : '<span class="pill out">OUT</span>';
+    html += `<tr>
+      <td>${escapeHtml(r.date)}</td>
+      <td>${type}</td>
+      <td>${escapeHtml(r.veh)}</td>
+      <td>${escapeHtml(r.driver || r.who)}</td>
+      <td>${r.desc?'<span class="pill cat">'+escapeHtml(r.desc)+'</span>':''} ${escapeHtml(r.comment)}</td>
+      <td class="num green">${r.amtIn?fmt(r.amtIn):''}</td>
+      <td class="num red">${r.amtOut?fmt(r.amtOut):''}</td>
+      <td class="num ${r.bal<0?'red':''}">${r.bal?fmt(r.bal):''}</td>
+    </tr>`;
+  });
+  tb.innerHTML = html;
+}
+
+function renderCharts(data){
+  // Trend by date
+  const byDate = {};
+  data.forEach(r=>{
+    if (!r.date) return;
+    byDate[r.date] = byDate[r.date] || {in:0,out:0};
+    byDate[r.date].in += r.amtIn;
+    byDate[r.date].out += r.amtOut;
+  });
+  const labels = Object.keys(byDate);
+  const ins = labels.map(d=>byDate[d].in);
+  const outs = labels.map(d=>byDate[d].out);
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart($("chartTrend"), {
+    type:"bar",
+    data:{labels, datasets:[
+      {label:"IN", data:ins, backgroundColor:"#22c55e"},
+      {label:"OUT", data:outs, backgroundColor:"#ef4444"}
+    ]},
+    options:chartOpts()
+  });
+
+  // Categories
+  const byCat = {};
+  data.forEach(r=>{ if(r.amtOut && r.desc){ byCat[r.desc]=(byCat[r.desc]||0)+r.amtOut; } });
+  const sorted = Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  if (catChart) catChart.destroy();
+  catChart = new Chart($("chartCat"), {
+    type:"doughnut",
+    data:{labels:sorted.map(x=>x[0]), datasets:[{data:sorted.map(x=>x[1]),
+      backgroundColor:["#7c5cff","#22d3ee","#f59e0b","#ef4444","#22c55e","#a855f7","#ec4899","#14b8a6"]}]},
+    options:{
+      plugins:{legend:{position:"right",labels:{color:"#cdd3ea",font:{size:11}}}},
+      responsive:true,maintainAspectRatio:false
+    }
+  });
+}
+
+function chartOpts(){
+  return {
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:"#cdd3ea"}}},
+    scales:{
+      x:{ticks:{color:"#8a93b2",maxRotation:60,minRotation:45},grid:{color:"#1b2547"}},
+      y:{ticks:{color:"#8a93b2",callback:v=>"₹"+v.toLocaleString("en-IN")},grid:{color:"#1b2547"}}
+    }
+  };
+}
+
+function exportCSV(){
+  const data = applyFilters(rows);
+  const head = ["Date","Vehicle","Driver/Source","Description","IN","OUT","Balance","Comment"];
+  const lines = [head.join(",")].concat(data.map(r=>[
+    r.date, r.veh, r.driver||r.who, r.desc, r.amtIn, r.amtOut, r.bal, r.comment
+  ].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(",")));
+  const blob = new Blob([lines.join("\n")], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "kail-ledger-" + new Date().toISOString().slice(0,10) + ".csv";
+  a.click();
+}
+
+["search","filterCat","filterDriver","filterDate","filterType"].forEach(id=>$(id).addEventListener("input",render));
+$("clearBtn").onclick = ()=>{["search","filterCat","filterDriver","filterDate","filterType"].forEach(id=>$(id).value="");render();};
+$("refreshBtn").onclick = load;
+$("exportBtn").onclick = exportCSV;
+$("printBtn").onclick = ()=>window.print();
+
+load();
+setInterval(load, 60_000); // auto refresh every minute
+</script>
+</body>
+</html>
