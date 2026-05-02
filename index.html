@@ -44,6 +44,21 @@
   .filters input,.filters select{background:#0d1430;color:var(--text);border:1px solid var(--line);padding:9px 12px;border-radius:9px;font-size:13px;font-family:inherit;outline:none}
   .filters input:focus,.filters select:focus{border-color:var(--accent)}
   .filters input[type=search]{min-width:240px}
+  .filters label.dr{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;background:#0d1430;border:1px solid var(--line);padding:4px 8px;border-radius:9px}
+  .filters label.dr input{border:none;padding:5px 4px;background:transparent;color-scheme:dark}
+  .ms{position:relative}
+  .ms-btn{background:#0d1430;color:var(--text);border:1px solid var(--line);padding:9px 12px;border-radius:9px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-family:inherit}
+  .ms-btn:hover{border-color:var(--accent)}
+  .ms-count{background:rgba(124,92,255,.2);color:#c4b5fd;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600}
+  .ms-caret{color:var(--muted);font-size:10px}
+  .ms-pop{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:10;background:#0d1430;border:1px solid var(--line);border-radius:10px;padding:8px;min-width:240px;max-height:300px;overflow:auto;box-shadow:0 12px 32px rgba(0,0,0,.4)}
+  .ms.open .ms-pop{display:block}
+  .ms-pop input[type=search]{width:100%;margin-bottom:6px;padding:6px 8px;background:#161e3c;border:1px solid var(--line);color:var(--text);border-radius:6px;font-size:12px}
+  .ms-pop label{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:12px}
+  .ms-pop label:hover{background:rgba(124,92,255,.12)}
+  .ms-pop .ms-actions{display:flex;gap:6px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:6px}
+  .ms-pop .ms-actions button{flex:1;background:transparent;border:1px solid var(--line);color:var(--text);padding:4px;border-radius:6px;cursor:pointer;font-size:11px}
+  .ms-pop .ms-actions button:hover{border-color:var(--accent)}
   .table-wrap{overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:12px}
   table{width:100%;border-collapse:collapse;font-size:13px}
   thead{position:sticky;top:0;background:#0d1430;z-index:1}
@@ -116,15 +131,17 @@
     <h3>Transactions</h3>
     <div class="filters">
       <input type="search" id="search" placeholder="Search driver, vehicle, description…" />
-      <select id="filterCat"><option value="">All categories</option></select>
-      <select id="filterDriver"><option value="">All drivers</option></select>
-      <select id="filterDate"><option value="">All dates</option></select>
+      <label class="dr">From <input type="date" id="dateFrom"></label>
+      <label class="dr">To <input type="date" id="dateTo"></label>
+      <div class="ms" data-key="cat"><button class="ms-btn">Categories <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
+      <div class="ms" data-key="driver"><button class="ms-btn">Drivers <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
+      <div class="ms" data-key="veh"><button class="ms-btn">Vehicles <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
       <select id="filterType">
         <option value="">All types</option>
         <option value="in">Cash IN only</option>
         <option value="out">Cash OUT only</option>
       </select>
-      <button class="btn" id="clearBtn">Clear</button>
+      <button class="btn" id="clearBtn">Clear all</button>
     </div>
     <div class="table-wrap">
       <table id="tbl">
@@ -210,7 +227,7 @@ function setStatus(text, loading, err){
 // 0 Date(IN) 1 Amount IN 2 Who Give 3 Date(OUT) 4 Vehicle 5 Driver 6 Amount OUT 7 Description 8 Balance 9 Comment
 function normalize(raw){
   const out = [];
-  for (let i = 3; i < raw.length; i++){      // skip 3 header rows
+  for (let i = 3; i < raw.length; i++){
     const r = raw[i] || [];
     const dateIn = (r[0]||"").trim();
     const amtIn  = parseNum(r[1]);
@@ -223,45 +240,109 @@ function normalize(raw){
     const bal    = parseNum(r[8]);
     const comment= (r[9]||"").trim();
     if (!dateIn && !dateOut && !amtIn && !amtOut) continue;
-    const date = dateOut || dateIn;
-    if (!date && !amtIn && !amtOut) continue;
-    out.push({date, dateIn, dateOut, amtIn, who, veh, driver, amtOut, desc, bal, comment});
+    // Split rows that have BOTH IN and OUT into two separate transactions
+    if (amtIn > 0){
+      out.push({
+        kind:"IN", date:dateIn||dateOut, dateObj:parseDate(dateIn||dateOut),
+        veh:"", driver:who, amtIn, amtOut:0,
+        desc:"CASH DEPOSIT", bal:0, comment
+      });
+    }
+    if (amtOut > 0){
+      out.push({
+        kind:"OUT", date:dateOut||dateIn, dateObj:parseDate(dateOut||dateIn),
+        veh, driver, amtIn:0, amtOut,
+        desc, bal, comment
+      });
+    }
   }
   return out;
 }
 function parseNum(s){ if(s==null) return 0; const n = Number(String(s).replace(/[^\d.\-]/g,'')); return isNaN(n)?0:n; }
+const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+function parseDate(s){
+  if(!s) return null;
+  const m = String(s).match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (m) return new Date(+m[3], MONTHS[m[2][0].toUpperCase()+m[2].slice(1).toLowerCase()] ?? 0, +m[1]);
+  const d = new Date(s); return isNaN(d) ? null : d;
+}
+function ymd(d){ if(!d) return ""; return d.toISOString().slice(0,10); }
 
 function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
 
+const MS_STATE = {cat:new Set(), driver:new Set(), veh:new Set()};
+
 function populateFilters(){
-  const cats = uniq(rows.map(r=>r.desc)).sort();
-  const drivers = uniq(rows.map(r=>r.driver)).sort();
-  const dates = uniq(rows.map(r=>r.date)).filter(Boolean);
-  fill($("filterCat"), cats);
-  fill($("filterDriver"), drivers);
-  fill($("filterDate"), dates);
+  buildMS("cat", uniq(rows.map(r=>r.desc)).sort());
+  buildMS("driver", uniq(rows.map(r=>r.driver)).sort());
+  buildMS("veh", uniq(rows.map(r=>r.veh)).sort());
 }
-function fill(sel, arr){
-  const cur = sel.value;
-  sel.innerHTML = sel.firstElementChild.outerHTML + arr.map(v=>`<option>${escapeHtml(v)}</option>`).join("");
-  sel.value = cur;
+
+function buildMS(key, items){
+  const root = document.querySelector(`.ms[data-key="${key}"]`);
+  const pop = root.querySelector(".ms-pop");
+  pop.innerHTML = `
+    <input type="search" placeholder="Search…" class="ms-search">
+    <div class="ms-actions">
+      <button data-act="all">Select all</button>
+      <button data-act="none">Clear</button>
+    </div>
+    <div class="ms-list">
+      ${items.map(v=>`<label><input type="checkbox" value="${escapeHtml(v)}"> ${escapeHtml(v)}</label>`).join("")}
+    </div>`;
+  pop.querySelector(".ms-search").addEventListener("input", e=>{
+    const q = e.target.value.toLowerCase();
+    pop.querySelectorAll("label").forEach(l=>{
+      l.style.display = l.textContent.toLowerCase().includes(q) ? "flex" : "none";
+    });
+  });
+  pop.querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>{
+    const checked = b.dataset.act === "all";
+    pop.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+      if (cb.closest("label").style.display !== "none"){
+        cb.checked = checked;
+        if (checked) MS_STATE[key].add(cb.value); else MS_STATE[key].delete(cb.value);
+      }
+    });
+    updateMSCount(key); render();
+  });
+  pop.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.onchange = ()=>{
+      if (cb.checked) MS_STATE[key].add(cb.value); else MS_STATE[key].delete(cb.value);
+      updateMSCount(key); render();
+    };
+  });
+  root.querySelector(".ms-btn").onclick = e=>{
+    e.stopPropagation();
+    document.querySelectorAll(".ms.open").forEach(o=>{ if(o!==root) o.classList.remove("open"); });
+    root.classList.toggle("open");
+  };
 }
+function updateMSCount(key){
+  const root = document.querySelector(`.ms[data-key="${key}"]`);
+  const n = MS_STATE[key].size;
+  root.querySelector(".ms-count").textContent = n ? n : "All";
+}
+document.addEventListener("click", ()=>document.querySelectorAll(".ms.open").forEach(o=>o.classList.remove("open")));
+
 function escapeHtml(s){return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
 function applyFilters(data){
   const q = $("search").value.toLowerCase().trim();
-  const c = $("filterCat").value;
-  const d = $("filterDriver").value;
-  const dt = $("filterDate").value;
   const t = $("filterType").value;
+  const from = $("dateFrom").value ? new Date($("dateFrom").value) : null;
+  const to   = $("dateTo").value   ? new Date($("dateTo").value)   : null;
+  if (to) to.setHours(23,59,59,999);
   return data.filter(r=>{
-    if (c && r.desc !== c) return false;
-    if (d && r.driver !== d) return false;
-    if (dt && r.date !== dt) return false;
+    if (MS_STATE.cat.size && !MS_STATE.cat.has(r.desc)) return false;
+    if (MS_STATE.driver.size && !MS_STATE.driver.has(r.driver)) return false;
+    if (MS_STATE.veh.size && !MS_STATE.veh.has(r.veh)) return false;
     if (t === "in" && !r.amtIn) return false;
     if (t === "out" && !r.amtOut) return false;
+    if (from && (!r.dateObj || r.dateObj < from)) return false;
+    if (to   && (!r.dateObj || r.dateObj > to)) return false;
     if (q){
-      const hay = [r.driver,r.veh,r.desc,r.who,r.comment,r.date].join(" ").toLowerCase();
+      const hay = [r.driver,r.veh,r.desc,r.comment,r.date].join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -384,8 +465,16 @@ function exportCSV(){
   a.click();
 }
 
-["search","filterCat","filterDriver","filterDate","filterType"].forEach(id=>$(id).addEventListener("input",render));
-$("clearBtn").onclick = ()=>{["search","filterCat","filterDriver","filterDate","filterType"].forEach(id=>$(id).value="");render();};
+["search","filterType","dateFrom","dateTo"].forEach(id=>$(id).addEventListener("input",render));
+$("clearBtn").onclick = ()=>{
+  ["search","filterType","dateFrom","dateTo"].forEach(id=>$(id).value="");
+  Object.keys(MS_STATE).forEach(k=>{
+    MS_STATE[k].clear();
+    document.querySelectorAll(`.ms[data-key="${k}"] input[type=checkbox]`).forEach(cb=>cb.checked=false);
+    updateMSCount(k);
+  });
+  render();
+};
 $("refreshBtn").onclick = load;
 $("exportBtn").onclick = exportCSV;
 $("printBtn").onclick = ()=>window.print();
