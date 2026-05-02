@@ -225,7 +225,8 @@
       <h3>Salary Sheet</h3>
       <div class="filters">
         <input type="search" id="sSearch" placeholder="Search driver, vehicle, bank…" />
-        <div class="ms" data-key="sMonth"><button class="ms-btn">Month <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
+        <select id="sMonthSwitch" title="Select month / sheet to load"></select>
+        <button class="btn" id="sManageMonths" title="Add or edit month sheets">⚙ Manage months</button>
         <div class="ms" data-key="sBank"><button class="ms-btn">Bank <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
         <div class="ms" data-key="sVeh"><button class="ms-btn">Vehicle <span class="ms-count">All</span><span class="ms-caret">▾</span></button><div class="ms-pop"></div></div>
         <select id="sFilterPay">
@@ -264,6 +265,24 @@
   </div><!-- /view-salary -->
 
   </main>
+</div>
+
+<div id="monthModal" style="display:none;position:fixed;inset:0;background:rgba(5,8,20,.75);z-index:100;backdrop-filter:blur(4px);align-items:center;justify-content:center">
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:720px;width:92%;max-height:85vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h2 style="margin:0;font-size:18px">Manage Salary Month Sheets</h2>
+      <button class="btn" id="closeModal">✕ Close</button>
+    </div>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 12px;line-height:1.6">
+      Add one entry per monthly sheet tab. Paste the <b>published CSV URL</b> for each month's tab.<br>
+      <b>How to get a tab's CSV URL:</b> in Google Sheets → File → Share → Publish to web → pick the specific sheet tab → format <b>CSV</b> → copy link.
+    </p>
+    <div id="monthRows"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn" id="addMonthRow">+ Add month</button>
+      <button class="btn primary" id="saveMonths" style="margin-left:auto">💾 Save & reload</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -371,8 +390,8 @@ function ymd(d){ if(!d) return ""; return d.toISOString().slice(0,10); }
 
 function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
 
-const MS_STATE = {month:new Set(), cat:new Set(), driver:new Set(), veh:new Set(), sMonth:new Set(), sBank:new Set(), sVeh:new Set()};
-const MS_RENDER = {month:()=>render(), cat:()=>render(), driver:()=>render(), veh:()=>render(), sMonth:()=>renderSalary(), sBank:()=>renderSalary(), sVeh:()=>renderSalary()};
+const MS_STATE = {month:new Set(), cat:new Set(), driver:new Set(), veh:new Set(), sBank:new Set(), sVeh:new Set()};
+const MS_RENDER = {month:()=>render(), cat:()=>render(), driver:()=>render(), veh:()=>render(), sBank:()=>renderSalary(), sVeh:()=>renderSalary()};
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function monthKey(d){ return d ? MONTH_NAMES[d.getMonth()]+" "+d.getFullYear() : ""; }
 
@@ -595,8 +614,25 @@ load();
 setInterval(load, 60_000); // auto refresh every minute
 
 /* ===================== SALARY MODULE ===================== */
-const SALARY_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTqWiE_PuyPt_cSS0dx-l5B0ypwn5lwxxq-Om7VKMSSy5YQgiLI4LDq7FgWNrzbrA/pub?output=csv";
+const DEFAULT_SALARY_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTqWiE_PuyPt_cSS0dx-l5B0ypwn5lwxxq-Om7VKMSSy5YQgiLI4LDq7FgWNrzbrA/pub?output=csv";
+const MONTHS_KEY = "kail-salary-months";
+let salaryMonths = loadMonthsConfig();
 let salaryRows = [];
+
+function loadMonthsConfig(){
+  try {
+    const raw = localStorage.getItem(MONTHS_KEY);
+    if (raw){ const j = JSON.parse(raw); if (Array.isArray(j) && j.length) return j; }
+  } catch(e){}
+  return [{name:"Current month", url:DEFAULT_SALARY_URL}];
+}
+function saveMonthsConfig(){
+  localStorage.setItem(MONTHS_KEY, JSON.stringify(salaryMonths));
+}
+function populateMonthSwitch(){
+  const sel = $("sMonthSwitch");
+  sel.innerHTML = salaryMonths.map((m,i)=>`<option value="${i}">${escapeHtml(m.name)}</option>`).join("");
+}
 
 async function fetchAny(url){
   const tries = [url, "https://corsproxy.io/?"+encodeURIComponent(url), "https://api.allorigins.win/raw?url="+encodeURIComponent(url)];
@@ -608,14 +644,16 @@ async function fetchAny(url){
 }
 
 async function loadSalary(){
+  populateMonthSwitch();
+  const idx = Math.min(parseInt($("sMonthSwitch").value)||0, salaryMonths.length-1);
+  $("sMonthSwitch").value = idx;
+  const url = salaryMonths[idx].url;
   $("sTbody").innerHTML = '<tr><td colspan="15" class="empty"><span class="loader"></span> Loading salary data…</td></tr>';
   try {
-    const text = await fetchAny(SALARY_URL);
+    const text = await fetchAny(url);
     const parsed = Papa.parse(text, {header:true, skipEmptyLines:true}).data;
     salaryRows = parsed.map(r=>{
-      const monthRaw = (r["MONTH"]||r["PAY MONTH"]||r["SALARY MONTH"]||r["Month"]||"").trim();
       return {
-      month: monthRaw,
       driver: (r["DRIVER NAME"]||"").trim(),
       mobile: (r["MOBILE NO"]||"").trim(),
       veh: (r["ALLOTED VEHICLE"]||"").trim(),
@@ -634,24 +672,6 @@ async function loadSalary(){
       pay: (r["PAY"]||"").trim().toUpperCase()
       };
     }).filter(r=>r.driver);
-    const sMonths = uniq(salaryRows.map(r=>r.month)).filter(Boolean);
-    const sMonthRoot = document.querySelector('.ms[data-key="sMonth"]');
-    if (sMonths.length){
-      buildMS("sMonth", sMonths);
-      sMonthRoot.title = "";
-      sMonthRoot.style.opacity = "1";
-    } else {
-      buildMS("sMonth", []);
-      sMonthRoot.title = "Add a MONTH column to your salary Google Sheet (e.g. 'Oct 2025') to enable this filter";
-      sMonthRoot.style.opacity = "0.5";
-      const pop = sMonthRoot.querySelector(".ms-pop");
-      pop.innerHTML = `<div style="padding:10px;font-size:12px;color:var(--muted);line-height:1.5">
-        <b style="color:var(--amber)">⚠ No MONTH column found</b><br><br>
-        To enable this filter, add a column named <code style="background:#161e3c;padding:1px 6px;border-radius:4px">MONTH</code> to your salary Google Sheet and fill it in like:<br><br>
-        <code style="background:#161e3c;padding:2px 6px;border-radius:4px">Oct 2025</code>, <code style="background:#161e3c;padding:2px 6px;border-radius:4px">Nov 2025</code>…<br><br>
-        Refresh after adding — months will appear here automatically.
-      </div>`;
-    }
     buildMS("sBank", uniq(salaryRows.map(r=>r.bank)).sort());
     buildMS("sVeh", uniq(salaryRows.map(r=>r.veh)).sort());
     renderSalary();
@@ -665,7 +685,6 @@ function applySalaryFilters(){
   const pay = $("sFilterPay").value;
   const adj = $("sFilterAdj").value;
   return salaryRows.filter(r=>{
-    if (MS_STATE.sMonth.size && !MS_STATE.sMonth.has(r.month)) return false;
     if (MS_STATE.sBank.size && !MS_STATE.sBank.has(r.bank)) return false;
     if (MS_STATE.sVeh.size && !MS_STATE.sVeh.has(r.veh)) return false;
     if (pay && r.pay !== pay) return false;
@@ -748,7 +767,7 @@ function exportSalaryCSV(){
 ["sSearch","sFilterPay","sFilterAdj"].forEach(id=>$(id).addEventListener("input", renderSalary));
 $("sClearBtn").onclick = ()=>{
   ["sSearch","sFilterPay","sFilterAdj"].forEach(id=>$(id).value="");
-  ["sMonth","sBank","sVeh"].forEach(k=>{
+  ["sBank","sVeh"].forEach(k=>{
     MS_STATE[k].clear();
     document.querySelectorAll(`.ms[data-key="${k}"] input[type=checkbox]`).forEach(cb=>cb.checked=false);
     updateMSCount(k);
@@ -758,6 +777,52 @@ $("sClearBtn").onclick = ()=>{
 $("salRefreshBtn").onclick = loadSalary;
 $("salExportBtn").onclick = exportSalaryCSV;
 $("salPrintBtn").onclick = ()=>window.print();
+$("sMonthSwitch").onchange = loadSalary;
+
+/* ---------- Manage Months modal ---------- */
+function openMonthModal(){
+  const wrap = $("monthRows");
+  wrap.innerHTML = salaryMonths.map((m,i)=>monthRowHTML(m,i)).join("");
+  attachMonthRowEvents();
+  $("monthModal").style.display = "flex";
+}
+function monthRowHTML(m,i){
+  return `<div class="month-row" data-i="${i}" style="display:grid;grid-template-columns:170px 1fr auto;gap:8px;margin-bottom:8px">
+    <input type="text" placeholder="Month name (e.g. Oct 2025)" value="${escapeHtml(m.name||'')}"
+      style="background:#0d1430;color:var(--text);border:1px solid var(--line);padding:9px 12px;border-radius:9px;font-size:13px">
+    <input type="url" placeholder="Published CSV URL for this month's tab" value="${escapeHtml(m.url||'')}"
+      style="background:#0d1430;color:var(--text);border:1px solid var(--line);padding:9px 12px;border-radius:9px;font-size:13px">
+    <button class="btn rm-btn" title="Remove">🗑</button>
+  </div>`;
+}
+function attachMonthRowEvents(){
+  $("monthRows").querySelectorAll(".rm-btn").forEach(b=>{
+    b.onclick = e=>{ e.target.closest(".month-row").remove(); };
+  });
+}
+$("addMonthRow").onclick = ()=>{
+  const div = document.createElement("div");
+  div.innerHTML = monthRowHTML({name:"",url:""}, 0);
+  $("monthRows").appendChild(div.firstChild);
+  attachMonthRowEvents();
+};
+$("saveMonths").onclick = ()=>{
+  const rows = [...$("monthRows").querySelectorAll(".month-row")];
+  const next = rows.map(r=>{
+    const [n,u] = r.querySelectorAll("input");
+    return {name:n.value.trim(), url:u.value.trim()};
+  }).filter(m=>m.name && m.url);
+  if (!next.length){ alert("Add at least one month with a URL"); return; }
+  salaryMonths = next;
+  saveMonthsConfig();
+  populateMonthSwitch();
+  $("sMonthSwitch").value = 0;
+  $("monthModal").style.display = "none";
+  loadSalary();
+};
+$("closeModal").onclick = ()=>$("monthModal").style.display="none";
+$("sManageMonths").onclick = openMonthModal;
+$("monthModal").onclick = e=>{ if (e.target.id==="monthModal") $("monthModal").style.display="none"; };
 
 /* ===================== SIDEBAR NAV ===================== */
 document.querySelectorAll(".nav-item").forEach(item=>{
@@ -766,7 +831,7 @@ document.querySelectorAll(".nav-item").forEach(item=>{
     item.classList.add("active");
     const v = item.dataset.view;
     document.querySelectorAll(".view").forEach(view=>view.classList.toggle("active", view.id === "view-"+v));
-    if (v === "salary" && !salaryRows.length) loadSalary();
+    if (v === "salary"){ populateMonthSwitch(); if (!salaryRows.length) loadSalary(); }
     window.scrollTo({top:0});
   };
 });
